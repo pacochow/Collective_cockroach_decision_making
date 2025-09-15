@@ -1,7 +1,7 @@
 import numpy as np
 
 class Cockroach_agent_uncommitted_capacity:
-    def __init__(self, nD: int, t_max: int, uncommitted_timescale = 1):
+    def __init__(self, nD: int, t_max: int, uncommitted_timescale = 500):
         self.nD = nD # Number of distractors
         self.state = self.nD+1
          # Initial state
