@@ -3,26 +3,8 @@ import pandas as pd
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 
-# Function to define the ODE system
-def ode_sys(t, x, p):
-    """
-    Compute the rate of change for the ODE system.
-    
-    Parameters:
-        t (float): Time.
-        x (array): Current state of the system (individuals in each shelter).
-        p (dict): Dictionary containing parameters (s, theta, mu, rho, n, N).
-        
-    Returns:
-        dx (array): Rate of change of the system state.
-    """
-    D = x / p['s']  # Compute densities
-    Q = p['theta'] / (1 + p['rho'] * D**p['n'])  # Light-influence function
-    dx = -x * Q + p['mu'] * (1 - D) * (p['N'] - np.sum(x))  # Rate of change
-    return dx
 
-
-distractor_type = "half_size_light"
+distractor_type = "low_size"
 sizeLQ = 1.75
 sizeHQ = 1.0
 lightLQ = 1.75
@@ -34,132 +16,178 @@ configs = {
     "half_size_light": [sizeHQ, sizeLQ, lightLQ, lightHQ],
 }
 config = configs[distractor_type]
-N=100
-nDmax=50
-theta_base=0.5
-rho=600
+N=1
+nDmax=18
+theta_base=0.01
+rho=1667
 n=2
-max_time=2000
-dt = 0.01
-
-if distractor_type=="half_size_light":
-    nD_range = np.arange(2, nDmax, 2)
-else:
-    nD_range = np.arange(1, nDmax)
+max_time=100000
+dt = 0.1
 
 
 times = np.arange(0, max_time, dt)
 
+
+leaving_rates = []
+maxs = []
+
+
+# nD_range = np.arange(2, nDmax, 2)
+nD_range = np.arange(1, nDmax)
+
+
 perf_val = []
 perf_time = []
+perf_ratio = []
 for nD in nD_range:
-    mu = 1 / (1 + nD)  # Probability of finding shelter
+    nS = nD+1
+    mu = 0.002 / (1 + nD)  # Probability of finding shelter
+    theta_T = theta_base*lightHQ
+    theta_L = theta_base*lightHQ
+    theta_B = theta_base*lightLQ
+    theta_D = theta_base*config[2]
 
-    if distractor_type=="half_size_light":
-        s = np.concatenate([[N], np.full(nD//2, config[0] * N), np.full(nD//2, config[1] * N)]) # Shelter capacities
-        theta = np.concatenate([[theta_base], np.full(nD//2, config[2] * theta_base), np.full(nD//2, config[3] * theta_base)]) # Shelter light levels
-    else:
-        s = np.concatenate([[N], np.full(nD, config[0] * N)]) # Shelter capacities
-        theta = np.concatenate([[theta_base], np.full(nD, config[2] * theta_base)]) # Shelter light levels
+    S_T = N*sizeHQ
+    S_L = N*sizeLQ
+    S_B = N*sizeHQ
+    S_D = N*config[0]
     
+    ns = nD+1
+
+
+    if distractor_type != "half_size_light":
+        s = np.concatenate([[sizeHQ * N], np.full(nD, config[0] * N)]) # Shelter capacities
+        theta = np.concatenate([[lightHQ * theta_base], np.full(nD, config[2] * theta_base)]) # Shelter light levels
+    else: 
+        s = np.concatenate([[sizeHQ * N], np.full(nD // 2, config[0] * N), np.full(nD // 2, config[1] * N)]) # Shelter capacities
+        theta = np.concatenate([[lightHQ * theta_base], np.full(nD // 2, config[2] * theta_base), np.full(nD // 2, config[3] * theta_base)]) # Shelter light levels
+
+
+
 
     # Pack parameters into a dictionary
     params = {'s': s, 'theta': theta, 'mu': mu, 'rho': rho, 'n': n, 'N': N}
     
-    # Solve the ODE system
-    def model(t, x): return ode_sys(t, x, params)
-    x0 = np.ones(len(s))*N/len(s)  # Initial conditions
-    sol = solve_ivp(model, t_span=(0, max_time), y0=x0, t_eval=times)
-    max_val = sol.y[0, -1]
-    max_idx = np.argmax(sol.y[0])
 
-    perf_val.append(max_val/params['N'])
-    if max_val/N > 0.5:
+    def one_distractor_model(t, xyz):
+        X, YD = xyz
+        U = N-X-YD
+        QT = theta_T / (1.0 + rho * ( (X / S_T)**n ))
+        QD = theta_D / (1.0 + rho * ( ((YD / nD) / S_D)**n ))
+        dx = -X * QT + mu       * (1.0 - X / S_T)       * U
+        dy = -YD * QD + (nD * mu) * (1.0 - YD / (nD * S_D)) * U
+        return np.array([dx, dy])
+
+
+    def two_distractor_model(t, xyz):
+        X, YL, YB = xyz
+        U = N - X - YL - YB
+
+        # Leaving terms (with density effects)
+        QT = theta_T / (1.0 + rho * (X / S_T) ** n)
+        QL = theta_L / (1.0 + rho * (2.0 * YL / ((ns - 1) * S_L)) ** n)
+        QB = theta_B / (1.0 + rho * (2.0 * YB / ((ns - 1) * S_B)) ** n)
+
+        # Arrival splits: target gets 1/ns, each distractor group gets (ns-1)/(2ns)
+        alpha_T  = mu
+        alpha_DL = mu * (ns - 1) / 2
+        alpha_DB = mu * (ns - 1) / 2
+
+        dX  = -X  * QT + alpha_T  * (1.0 - X  / S_T) * U
+        dYL = -YL * QL + alpha_DL * (1.0 - 2.0 * YL / ((ns - 1) * S_L)) * U
+        dYB = -YB * QB + alpha_DB * (1.0 - 2.0 * YB / ((ns - 1) * S_B)) * U
+        return np.array([dX, dYL, dYB])
+
+    times = np.arange(0.0, max_time, dt)
+    
+    
+    if distractor_type != "half_size_light":
+        x0 = np.array([0.0, 0.0])   # start uncommitted
+        sol = solve_ivp(one_distractor_model, (times[0], times[-1]), x0, t_eval=times, rtol=1e-8, atol=1e-10)
+    else:
+        x0 = np.array([0.0, 0.0, 0.0])   # start uncommitted
+        sol = solve_ivp(two_distractor_model, (times[0], times[-1]), x0, t_eval=times, rtol=1e-8, atol=1e-10)
+
+    t_max_val = sol.y[0].max()
+    t_max_idx = sol.y[0].argmax()
+    d_max_val = np.sort(sol.y[1:, -1])[::-1][0]
+    
+    if distractor_type == "half_size_light":
+        d_max_val/=(nD/2)
+    else:
+        d_max_val/=nD
+    perf_val.append(t_max_val/params['N'])
+    perf_ratio.append(t_max_val/d_max_val)
+    if t_max_val/N > 0.5:
         # Find the time at which the solution reaches 95% of its maximum
-        time_to_95 = next((t for t, y in zip(times, sol.y[0, :]) if y >= 0.95 * max_val), None)
+        time_to_95 = next((t for t, y in zip(times, sol.y[0, :]) if y >= 0.95 * t_max_val), None)
         perf_time.append(time_to_95)
     else:
         perf_time.append(None)
 
 
-    # print(f"Number of distractors: {nD}", sol.y.shape)
-    
-    # for i in np.arange(1, nD+1)[::-1]:
-    #     if i <= nD//2:
-    #         plt.plot(times, sol.y[i], c='tab:green', label = "Low light quality distractor")
-    #     else:
-    #         plt.plot(times, sol.y[i], c='tab:blue', label = "Low size quality distractor")
-    # plt.plot(times, sol.y[0], c='black', label = "Target")
-    # plt.ylim([-5, N])
-    # handles, labels = plt.gca().get_legend_handles_labels()
-    # unique_labels = dict(zip(labels, handles))  # Keep only unique labels
-    # plt.legend(unique_labels.values(), unique_labels.keys())
-    # plt.xlabel("Time")
-    # plt.ylabel("Number of individuals")
+    distractor = sol.y[1]/nD
+    leaving_rate = theta_D*distractor/(1+rho*(distractor/S_D)**2)
+    leaving_rates.append(leaving_rate[np.argmax(sol.y[1])])
+
+    # plt.plot(sol.y[1])
+    # plt.plot(sol.y[0], c='black')
+    # plt.scatter(np.argmax(sol.y[1]), sol.y[1,np.argmax(sol.y[1])])
     # plt.show()
+    # plt.plot(leaving_rate[1, :max_time]/nD)
+    # plt.scatter(np.argmax(sol.y[1]), leaving_rate[1,np.argmax(sol.y[1])]/nD)
+    # plt.show()
+    # print(np.max(sol.y[1, np.argmax(sol.y[1])])/nD)
+    # if nD == 2:
+    #     break
 
-plt.figure(figsize = (8,6))
-plt.scatter(nD_range, perf_val, c='black', marker = 'X')
-plt.plot(nD_range, perf_val, c='black')
-plt.xlabel("Number of distractors")
-plt.ylabel("Proportion under target shelter")
-plt.ylim([0, 1])
+# Set global font size
+plt.rcParams.update({'font.size': 24})
+
+colors = ['tab:orange', 'tab:red','dodgerblue']
+fig=plt.figure(figsize = (6,5))
+
+plt.plot(nD_range, perf_val, linewidth = 4, c='black')
+
+# plt.xlabel("Number of distractors")
+# plt.ylabel("Final proportion under target")
+plt.ylabel(r"$\bar{X}$")
+plt.xticks([0, 5, 10, 15], [])
+plt.xlim([0, 18])
+plt.ylim([-0.1, 1.1])
+ax=fig.gca()
+for axis in ['top','bottom','left','right']:
+    ax.spines[axis].set_linewidth(2)
+# plt.savefig("../figs/mfm_accuracy_with_markers.png", bbox_inches='tight')
 plt.show()
 
-plt.figure(figsize = (8,6))
-plt.scatter(nD_range, perf_time, c='black', marker = 'X')
-plt.plot(nD_range, perf_time, c='black')
+
+serial_prediction = 1800*np.arange(1, 20)+perf_time[0]
+exponential_prediction= 1800*np.arange(1, 20)**1.3+ perf_time[0]
+
+
+fig=plt.figure(figsize = (6,5))
+# hours = np.array([0, 2, 4, 6, 8, 10, 12])
+hours = np.array([0, 4, 8, 12, 16])
+seconds = hours*3600
+
+
+plt.plot(nD_range, perf_time, linewidth = 4, c='black')
 plt.xlabel("Number of distractors")
-plt.ylabel("Time to 95% completion (s)")
-plt.ylim([0, 1100])
+# plt.ylabel(r"$T_{95}$ decision time (hrs)")
+# plt.xticks([])
+# plt.xticks(np.arange(1, 14), np.arange(2, 15))
+# plt.scatter(nD_range[0], perf_time[0], marker = '*', c='black', s=800, zorder = 5)
+# plt.scatter(nD_range[4], perf_time[4], marker = '^', c='black', s=800, zorder = 5)
+plt.xlim([0, 13])
+plt.yticks(seconds, hours)
+plt.yticks(seconds, [])
+# plt.axhline(10*3600, xmin = 0.08, c='tab:blue', linestyle = '--', linewidth = 4)
+# plt.plot(np.arange(1, 20), serial_prediction, linestyle = '--', c='tab:orange', linewidth = 4)
+# plt.plot(np.arange(1, 20), exponential_prediction, linestyle = '--', c='tab:red', linewidth = 4)
+plt.ylim([0, 20*3600])
+ax=fig.gca()
+for axis in ['top','bottom','left','right']:
+    ax.spines[axis].set_linewidth(2)
+# plt.savefig("../figs/mfm_t95_lit_rev_preds.png", bbox_inches='tight')
 plt.show()
-
-# perf_val = []
-# perf_time = []
-# for i in range(nDmax // 2 + 1):
-#     nD = i*2  # Current number of distractors
-
-#     mu = 1 / (1 + nD)  # Probability of finding shelter
-#     s = np.concatenate([[N], np.full(nD//2, config[0] * N), np.full(nD//2, config[1] * N)]) # Shelter capacities
-#     theta = np.concatenate([[theta_base], np.full(nD//2, config[2] * theta_base), np.full(nD//2, config[3] * theta_base)]) # Shelter light levels
-    
-#     # Pack parameters into a dictionary
-#     params = {'s': s, 'theta': theta, 'mu': mu, 'rho': rho, 'n': n, 'N': N}
-    
-#     # Solve the ODE system
-#     def model(t, x): return ode_sys(t, x, params)
-#     x0 = np.zeros(len(s))  # Initial conditions
-#     sol = solve_ivp(model, t_span=(0, max_time), y0=x0, t_eval=times)
-#     if sol.y.shape[1] > 0:  # Check if the solution is valid
-#         max_val = np.max(sol.y[0])
-#         max_idx = np.argmax(sol.y[0])
-
-#         perf_val.append(max_val/params['N'])
-
-#         # Find the time at which the solution reaches 95% of its maximum
-#         time_to_95 = next((t for t, y in zip(times, sol.y[0, :]) if y >= 0.95 * max_val), None)
-#         perf_time.append(time_to_95)
-#     else:
-#         perf_val.append(None)
-#         perf_time.append(None)
-    
-#     print(f"Number of distractors: {nD}", sol.y.shape)
-#     for i in range(nD+1):
-#         plt.plot(times, sol.y[i])
-#     plt.ylim([-5, 100])
-#     plt.show()
-
-
-
-# plt.plot(np.arange(0, nDmax + 1, 2), perf_val)
-# plt.xlabel("Number of distractors")
-# plt.ylabel("Proportion of individuals picking optimal shelter")
-# plt.legend()
-# plt.show()
-
-
-# plt.plot(np.arange(0, nDmax + 1, 2), perf_time)
-# plt.xlabel("Number of distractors")
-# plt.ylabel("Time to 95% completion")
-# plt.legend()
-# plt.show()
