@@ -1,31 +1,32 @@
 import numpy as np
 
-def geometric_transition_probs(n, i, sum, p=0.5):
+def geometric_transition_probs(n, i, sum, p = 0.9):
     """
     Compute normalized circular transition probabilities with geometric decay from shelter i.
 
     Parameters:
         n (int): Total number of shelters
-        i (int): Current shelter index (0-based)
-        p (float): Base probability for adjacent shelter
+        i (int): Current shelter index 
+        p (float): Base probability for re-entering shelter
 
     Returns:
         probs (np.ndarray): Normalized transition probability array of length n
     """
     indices = np.arange(n)
     distances = np.minimum((indices - i) % n, (i - indices) % n)  # Circular distance
-    probs = np.where(distances > 0, p * (1 - p) ** (distances - 1), 0.0)
+    probs = p * (1 - p) ** distances
     probs = probs*sum/probs.sum()
     return probs
 
 class Cockroach_agent_spatial:
-    def __init__(self, nD: int, t_max: int, uncommitted_timescale = 1):
+    def __init__(self, nD: int, t_max: int, transition_matrix: np.array, uncommitted_timescale = 1):
         self.nD = nD # Number of distractors
+        self.transition_matrix = transition_matrix
         self.state = self.nD+1 # Initialize agents in uncommitted state
          # Initial state
         self.states = np.zeros(t_max) # Past history of agent states
         self.states[0] = self.state
-        self.last_shelter = self.state
+        self.last_shelter = None
         self.dt = 0.1
         self.total_uncommitted_probability = np.exp(-self.dt/uncommitted_timescale)
         self.uncommitted_probabilities = np.ones(self.nD+2)*(1-self.total_uncommitted_probability)/(self.nD+1)
@@ -33,13 +34,14 @@ class Cockroach_agent_spatial:
         self.rejection_scaling = 1 # Scaling factor for whether shelter entry gets rejected
 
     def update_state(self, t, shelter_numbers, shelter_sizes, theta, parameters):
-        
+
         # If agent is uncommitted
         if self.state == self.nD+1:
 
-            # Update transition probabilities with new probabilities dependent on last shelter visited
-            self.uncommitted_probabilities[:self.nD+1] = geometric_transition_probs(self.nD+1, self.last_shelter, 1-self.total_uncommitted_probability)
-
+            if self.last_shelter is not None:
+                # Update transition probabilities with new probabilities dependent on last shelter visited
+                # self.uncommitted_probabilities[:self.nD+1] = geometric_transition_probs(self.nD+1, self.last_shelter, 1-self.total_uncommitted_probability, 0.9)
+                self.uncommitted_probabilities[:self.nD+1] = (1-self.total_uncommitted_probability)*self.transition_matrix[self.last_shelter]
             # Try shelter randomly
             new_state = np.random.choice(np.arange(0, self.nD+2), p = self.uncommitted_probabilities)
 
@@ -74,7 +76,7 @@ def simulate(agents, s, theta, parameters, t_max=1000):
     shelter_numbers_over_time[0] = tally_agents(agents)
     for t in range(1, t_max):
         shelter_numbers = tally_agents(agents)
-        # print(shelter_numbers)
+
         shelter_numbers_over_time[t] = shelter_numbers
         past_shelter_numbers[:] = shelter_numbers
         update_agents(agents, t, past_shelter_numbers, s, theta, parameters)

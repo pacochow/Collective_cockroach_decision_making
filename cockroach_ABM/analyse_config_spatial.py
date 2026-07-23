@@ -105,6 +105,7 @@ for nD in nD_range:
     else:
         perf_time.append(None)
 
+
 # plt.figure(figsize = (8,6))
 # plt.scatter(nD_range, perf_val, c='black', marker = 'X')
 # plt.plot(nD_range, perf_val, c='black')
@@ -123,13 +124,13 @@ for nD in nD_range:
 
 
 
-model = "uncommitted_capacity"
+model = "spatial"
 
 
-config=distractor_type
+nD_range = np.arange(2, nDmax, 2)
 
-target_proportions = np.load(f"../Analysed_data/cockroach_abm_{model}/{N}_{config}_500decay_target_proportions.npy")[:13]
-time_constants = np.load(f"../Analysed_data/cockroach_abm_{model}/{N}_{config}_500decay_time_constants.npy")[:13]
+target_proportions = np.load(f"../Analysed_data/cockroach_abm_{model}/100_{distractor_type}_500decay_target_proportions.npy")[:13]
+time_constants = np.load(f"../Analysed_data/cockroach_abm_{model}/100_{distractor_type}_500decay_time_constants.npy")[:13]
 n_repeats = target_proportions.shape[1]
 
 median_proportions = np.median(target_proportions,axis = 1)
@@ -139,8 +140,9 @@ median_time_constants = np.nanmedian(time_constants,axis = 1)
 median_time_constants[counts<=10] = np.nan
 sd_time_constants = time_constants.std(axis = 1)
 
+
 y_bins = 1000
-    
+
 
 x_values = np.repeat(nD_range, n_repeats)
 y_values = np.linspace(0, 1, y_bins)  # Fixed y range for KDE
@@ -181,25 +183,26 @@ ax.set_ylim(0, 1)
 
 for spine in ax.spines.values():
     spine.set_linewidth(2)
-plt.savefig("../figs/abm_conjunction_search_accuracy.png", bbox_inches = 'tight')
+#plt.savefig("../figs/spatial_abm_conjunction_search_accuracy.png", bbox_inches = 'tight')
 plt.show()
 
 y_bins = 1000
-y_values = np.linspace(0, 210000, y_bins)
+y_values = np.linspace(0, 700100, y_bins)
 density_matrix = np.zeros((len(nD_range), y_bins))
 
 for i, x in enumerate(nD_range):
-    valid_data = time_constants[i][~np.isnan(time_constants[i])]
-    if len(valid_data) > 1:
-        kde = gaussian_kde(valid_data, bw_method=0.1)
-        density_values = kde(y_values)
-        density_matrix[i, :] = density_values / np.max(density_values)
-    else:
-        density_matrix[i, :] = np.zeros_like(y_values)
+    if counts[i]>10:
+        valid_data = time_constants[i][~np.isnan(time_constants[i])]
+        if len(valid_data) > 1:
+            kde = gaussian_kde(valid_data, bw_method=0.1)
+            density_values = kde(y_values)
+            density_matrix[i, :] = density_values / np.max(density_values)
+        else:
+            density_matrix[i, :] = np.zeros_like(y_values)
 
 
 X_edges = np.arange(len(nD_range) + 1)
-Y_edges = np.linspace(0, 210000, y_bins + 1)
+Y_edges = np.linspace(0, 700100, y_bins + 1)
 X, Y = np.meshgrid(X_edges, Y_edges)
 
 fig=plt.figure(figsize=(10, 6))
@@ -213,6 +216,7 @@ xticks = np.arange(len(nD_range)) + 0.5
 ax.set_xticks(xticks)
 
 
+
 desired_labels = [2, 8, 14, 20, 26]
 xtick_labels = [str(d) if d in desired_labels else "" for d in nD_range]
 ax.set_xticklabels(xtick_labels)
@@ -220,13 +224,13 @@ ax.set_xticklabels(xtick_labels)
 
 ax.set_xlabel("Number of distractors")
 ax.set_ylabel("$T_{95}$ (hrs)")
-ax.set_ylim([-20, 210000])
-hours = np.array([0, 12, 24, 36, 48])
+ax.set_ylim([-20, 700000])
+hours = np.array([0, 24, 48, 72, 96, 120, 144, 168])
 seconds = hours*3600
 ax.set_yticks(seconds)
 ax.set_yticklabels(hours)
 
 for spine in ax.spines.values():
     spine.set_linewidth(2)
-plt.savefig("../figs/abm_conjunction_search_time.png", bbox_inches = 'tight')
+#plt.savefig("../figs/spatial_abm_conjunction_search_time.png", bbox_inches = 'tight')
 plt.show()

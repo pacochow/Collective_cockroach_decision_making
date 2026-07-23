@@ -5,8 +5,8 @@ from cockroach_abm_spatial import *
 import matplotlib.pyplot as plt
 
 distractor_type = "half_size_light"
-theta_base = 0.5
-t_max = 10000
+theta_base = 0.01
+t_max = 100000
 sizeLQ = 1.75
 sizeHQ = 1.0
 lightLQ = 1.75
@@ -20,10 +20,10 @@ configs = {
 config = configs[distractor_type]
 
 N = 100
-nD = 6
+nD = 4
 parameters = {
     "h": 1,
-    "rho": 600
+    "rho": 1667
 }
 
 if distractor_type == "half_size_light":
@@ -33,8 +33,9 @@ else:
     s = np.concatenate([[N], np.full(nD, config[0] * N)]) # Shelter capacities
     theta = np.concatenate([[theta_base], np.full(nD, config[2] * theta_base)]) # Shelter light levels
 
+trans = np.load(f"../Analysed_data/transition_matrices/{nD+1}_transition_probs.npy")
 
-agents = [Cockroach_agent_spatial(nD, t_max) for _ in range(N)]
+agents = [Cockroach_agent_uncommitted_capacity(nD, t_max) for _ in range(N)]
 shelter_numbers = simulate(agents, s, theta, parameters, t_max = t_max)
 
 
@@ -46,7 +47,7 @@ for i in range(nD+1):
     else:
         plt.plot(np.arange(t_max)*agents[0].dt, shelter_numbers[:, i]/N, c='tab:orange', linewidth = 2)
 plt.xlabel("Time (s)")
-plt.ylabel("Proportion of individuals under shelter")
+plt.ylabel("Proportion of individuals \nunder shelter")
 # plt.legend(["Target", "Distractor"])
 plt.show()
 
@@ -67,6 +68,6 @@ for i in range(nD+1):
     else:
         plt.plot(np.arange(t_max)*agents[0].dt, shelter_numbers[:t_max, i]/N, c='tab:orange', linewidth = 2)
 plt.xlabel("Time (s)")
-plt.ylabel("Proportion of individuals under shelter")
+plt.ylabel("Proportion of individuals \nunder shelter")
 # plt.legend(["Target", "Distractor"])
 plt.show()

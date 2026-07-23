@@ -11,8 +11,8 @@ from helpers import *
 
 model = "uncommitted_capacity"
 distractor_type = "half_size_light"
-theta_base = 0.5
-t_max = 10000
+theta_base = 0.01
+t_max = 100000
 sizeLQ = 1.75
 sizeHQ = 1.0
 lightLQ = 1.75
@@ -26,7 +26,7 @@ configs = {
 config = configs[distractor_type]
 
 N = 100
-nD = 6
+nD = 4
 parameters = {
     "h": 1,
     "rho": 600
@@ -79,9 +79,9 @@ cat_unique = [0, 1, 2]
 proportions = np.load(f"../Analysed_data/cockroach_abm_{model}/elimination_proportions_{nD}.npy")
 
 # Set global font size
-plt.rcParams.update({'font.size': 22})
+plt.rcParams.update({'font.size': 24})
 
-fig, ax = plt.subplots(figsize=(8, 6))
+fig, ax = plt.subplots(figsize=(10, 5.5))
 bottom = np.zeros(len(x_vals))
 colors = ['black', 'tab:red', 'tab:orange']
 labels = ['Target', 'Bright distractor', 'Large distractor']
@@ -90,12 +90,13 @@ for i in range(len(cat_unique)):
     ax.bar(x_vals, proportions[i], bottom=bottom, label=labels[i], color=colors[i])
     bottom += proportions[i]
 
-ax.set_xlabel("Elimination order")
+# ax.set_xlabel("Elimination order")
 ax.set_ylabel("Proportion")
-ax.set_xticks(x_vals, x_vals+1)
+ax.set_xticks(x_vals, [])
 # ax.legend()
 ax=fig.gca()
 for axis in ['top','bottom','left','right']:
     ax.spines[axis].set_linewidth(2)
 plt.tight_layout()
+plt.savefig(f"../figs/abm_shelter_elimination_ranks_{nD}.png", bbox_inches = 'tight')
 plt.show()

@@ -5,8 +5,8 @@ class Cockroach_agent_uncommitted_capacity:
         self.nD = nD # Number of distractors
         self.state = self.nD+1
          # Initial state
-        self.states = np.zeros(t_max) # Past history of agent states
-        self.states[0] = self.state
+        # self.states = np.zeros(t_max) # Past history of agent states
+        # self.states[0] = self.state
         self.dt = 0.1
         uncommitted_probability = np.exp(-self.dt/uncommitted_timescale)
         self.uncommitted_probabilities = np.ones(self.nD+2)*(1-uncommitted_probability)/(self.nD+1)
@@ -34,7 +34,7 @@ class Cockroach_agent_uncommitted_capacity:
             if np.random.rand() > p_stay:  # If agent leaves
                 new_state = self.nD+1
         self.state=new_state
-        self.states[t] = self.state  # Store state
+        # self.states[t] = self.state  # Store state
 
 def tally_agents(agents):
     states = np.array([agent.state for agent in agents])
